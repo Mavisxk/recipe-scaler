@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recipe Scaler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Sans+Tamil:wght@400;500;600&family=Noto+Serif+SC&family=Noto+Serif+Tamil&display=swap" rel="stylesheet">
+<style>
+  /* Layout: one centred column of three stacked cards (stepper, calorie summary, ingredients). */
+  :root {
+    --bg: #edefea;
+    --card: #f8f9f6;
+    --ink: #29322e;
+    --muted: #76817b;
+    --line: #dde2db;
+    --accent: #4d6b61;
+    --accent-ink: #f6f8f5;
+    --font-display: "Instrument Serif", "Noto Serif SC", "Noto Serif Tamil", Georgia, "Times New Roman", serif;
+    --font-body: "Instrument Sans", "Noto Sans SC", "Noto Sans Tamil", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b201e;
+      --card: #232927;
+      --ink: #e4e9e5;
+      --muted: #94a09a;
+      --line: #333b38;
+      --accent: #8fb3a6;
+      --accent-ink: #17201c;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1b201e;
+    --card: #232927;
+    --ink: #e4e9e5;
+    --muted: #94a09a;
+    --line: #333b38;
+    --accent: #8fb3a6;
+    --accent-ink: #17201c;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 56px 20px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  header { padding: 0 4px 8px; display: flex; flex-direction: column; gap: 20px; }
+  .pickers { display: flex; flex-wrap: wrap; gap: 12px 16px; }
+  .picker { position: relative; max-width: 100%; }
+  .picker.lang select { min-width: 160px; }
+  .picker label { display: block; margin: 0 0 6px 2px; font-size: 13px; color: var(--muted); }
+  .picker .wrap { position: relative; }
+  .picker select {
+    appearance: none; -webkit-appearance: none;
+    width: 100%; min-width: 260px; max-width: 100%;
+    padding: 12px 44px 12px 16px;
+    font: 500 16px/1.2 var(--font-body);
+    color: var(--ink);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .picker select:hover { border-color: var(--muted); }
+  .picker select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .picker .wrap::after {
+    content: ""; position: absolute; right: 18px; top: 50%;
+    width: 8px; height: 8px;
+    border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+    transform: translateY(-70%) rotate(45deg);
+    pointer-events: none;
+  }
+  .title-block { display: flex; flex-direction: column; }
+  .photo { margin: 0 -4px; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: var(--line); }
+  .photo[hidden] { display: none; }
+  .photo img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+  .eyebrow { margin: 0 0 6px; font-size: 13px; color: var(--muted); letter-spacing: 0.02em; }
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(34px, 7vw, 44px);
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 24px;
+  }
+
+  /* Stepper (the one primary control) */
+  .stepper-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .stepper-label { display: flex; flex-direction: column; gap: 2px; }
+  .stepper-label strong { font-weight: 600; font-size: 17px; }
+  .stepper-label span { font-size: 13px; color: var(--muted); }
+  .stepper { display: flex; align-items: center; gap: 8px; }
+  .stepper button {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: 500 24px/1 var(--font-body);
+    cursor: pointer;
+    display: grid; place-items: center;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .stepper button:hover:not(:disabled) { opacity: 0.9; }
+  .stepper button:active:not(:disabled) { transform: scale(0.95); }
+  .stepper button:disabled { background: transparent; color: var(--muted); border-color: var(--line); cursor: not-allowed; }
+  .stepper button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .count {
+    min-width: 64px;
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 48px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Calories summary */
+  .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .stat { display: flex; flex-direction: column; gap: 4px; }
+  .stat + .stat { border-left: 1px solid var(--line); padding-left: 24px; }
+  .stat .label { font-size: 13px; color: var(--muted); }
+  .stat .value { font-family: var(--font-display); font-size: 36px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat .value small { font-family: var(--font-body); font-size: 14px; color: var(--muted); margin-left: 4px; }
+
+  /* Ingredients */
+  .ingredients h2 { margin: 0 0 12px; font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0.02em; }
+  ul, ol { list-style: none; margin: 0; padding: 0; }
+  .row, .head {
+    display: grid;
+    grid-template-columns: 1fr auto minmax(56px, auto);
+    gap: 16px;
+    align-items: baseline;
+  }
+  .head { font-size: 12px; color: var(--muted); padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .row { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; padding-bottom: 0; }
+  .head .num, .row .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .name small { display: block; font-size: 13px; color: var(--muted); }
+  .qty { font-weight: 600; }
+  .qty .unit { font-weight: 400; color: var(--muted); margin-left: 4px; }
+  .kcal { color: var(--muted); }
+  .note { margin: 16px 0 0; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+
+  /* Method */
+  .method h2 { margin: 0 0 16px; font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0.02em; }
+  .steps { display: flex; flex-direction: column; gap: 20px; }
+  .steps li { display: grid; grid-template-columns: 28px 1fr; gap: 14px; align-items: start; }
+  .step-n {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid var(--line);
+    color: var(--accent);
+    font-size: 13px; font-weight: 600;
+    display: grid; place-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .steps strong { font-weight: 600; display: block; line-height: 28px; }
+  :lang(ta) .steps strong, :lang(ta) .name { line-height: 1.6; }
+  .steps p { margin: 0; color: var(--muted); max-width: 65ch; }
+
+  @media (max-width: 420px) {
+    .page { padding-top: 36px; }
+    .card { padding: 20px; }
+    .stepper-card { flex-direction: column; align-items: stretch; }
+    .stepper { justify-content: space-between; }
+    .stat + .stat { padding-left: 16px; }
+    .stat .value { font-size: 30px; }
+    .row, .head { grid-template-columns: 1fr auto minmax(48px, auto); gap: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <div class="pickers">
+      <div class="picker recipe">
+        <label for="recipe" data-i18n="recipe">Recipe</label>
+        <div class="wrap"><select id="recipe"></select></div>
+      </div>
+      <div class="picker lang">
+        <label for="lang" data-i18n="language">Language</label>
+        <div class="wrap"><select id="lang"></select></div>
+      </div>
+    </div>
+    <figure class="photo" id="photo" hidden><img id="photo-img" alt=""></figure>
+    <div class="title-block">
+      <p class="eyebrow" id="course"></p>
+      <h1 id="title"></h1>
+    </div>
+  </header>
+
+  <section class="card stepper-card" aria-label="Servings">
+    <div class="stepper-label">
+      <strong data-i18n="servings">Servings</strong>
+      <span id="written">Recipe is written for 4</span>
+    </div>
+    <div class="stepper">
+      <button id="minus" type="button" aria-label="Fewer servings">&minus;</button>
+      <div class="count" id="count" role="status" aria-live="polite">4</div>
+      <button id="plus" type="button" aria-label="More servings">+</button>
+    </div>
+  </section>
+
+  <section class="card summary" aria-label="Calories">
+    <div class="stat">
+      <span class="label" data-i18n="whole">Whole recipe</span>
+      <span class="value"><span id="total">0</span><small data-i18n="kcal">kcal</small></span>
+    </div>
+    <div class="stat">
+      <span class="label" data-i18n="per">Per serving</span>
+      <span class="value"><span id="per">0</span><small data-i18n="kcal">kcal</small></span>
+    </div>
+  </section>
+
+  <section class="card ingredients" aria-label="Ingredients">
+    <h2 data-i18n="ingredients">Ingredients</h2>
+    <div class="head"><span data-i18n="item">Item</span><span class="num" data-i18n="amount">Amount</span><span class="num" data-i18n="kcal">kcal</span></div>
+    <ul id="list"></ul>
+    <p class="note" data-i18n="note">Whole items such as onions and garlic cloves round to the nearest whole number, with a minimum of 1. Calories follow the amount shown.</p>
+  </section>
+
+  <section class="card method" aria-label="Method">
+    <h2 data-i18n="method">Method</h2>
+    <ol class="steps" id="steps"></ol>
+  </section>
+</main>
+
+<script>
+  var BASE = 4, MIN = 1, MAX = 12;
+
+  // kcal4: calories for the whole base recipe (4 servings). Whole items use kcalEach per piece.
+  var RECIPES = [
+    {
+      id: "ragu", name: "Tagliatelle al Ragù", course: "Primo",
+      image: "img/ragu.webp", imageAlt: "A plate of tagliatelle topped with meat ragù and grated Parmigiano",
+      ingredients: [
+        { name: "Dried tagliatelle", qty: 320, unit: "g", kcal4: 1130 },
+        { name: "Beef mince", qty: 400, unit: "g", kcal4: 1000 },
+        { name: "Pancetta", note: "finely diced", qty: 80, unit: "g", kcal4: 280 },
+        { name: "Tomato passata", qty: 400, unit: "g", kcal4: 120 },
+        { name: "Red wine", qty: 150, unit: "ml", kcal4: 125 },
+        { name: "Whole milk", qty: 100, unit: "ml", kcal4: 64 },
+        { name: "Olive oil", qty: 2, unit: "tbsp", kcal4: 240 },
+        { name: "Parmigiano Reggiano", note: "grated, to serve", qty: 40, unit: "g", kcal4: 160 },
+        { name: "Salt", qty: 1, unit: "tsp", kcal4: 0 },
+        { name: "Onion", note: "medium", qty: 1, whole: true, kcalEach: 44 },
+        { name: "Carrot", note: "medium", qty: 1, whole: true, kcalEach: 25 },
+        { name: "Celery sticks", qty: 1, whole: true, kcalEach: 6 }
+      ],
+      steps: [
+        ["Make the soffritto", "Finely chop the onion, carrot and celery. Warm the olive oil in a heavy pot over medium-low heat and cook the vegetables for 10 minutes, until very soft."],
+        ["Brown the meat", "Add the pancetta and cook until the fat renders. Turn the heat up, add the beef and break it up, cooking until browned and no liquid remains."],
+        ["Add the wine", "Pour in the red wine and let it bubble until almost completely reduced."],
+        ["Simmer slowly", "Stir in the passata and a little salt. Cover partly and cook on the lowest heat for 2 hours, stirring now and then. Add a splash of water if it gets dry. Larger batches may need longer."],
+        ["Finish with milk", "Stir in the milk for the last 15 minutes and cook until the ragù is thick and glossy."],
+        ["Cook the pasta", "Boil the tagliatelle in well-salted water until al dente. Save a cup of the cooking water, then drain."],
+        ["Toss and serve", "Toss the pasta with the ragù, loosening with cooking water if needed. Serve with grated Parmigiano Reggiano."]
+      ]
+    },
+    {
+      id: "tortelloni", name: "Tortelloni in Brodo", course: "Primo",
+      image: "img/tortelloni.webp", imageAlt: "A white bowl of tortelloni in clear golden broth",
+      ingredients: [
+        { name: "Fresh tortelloni", note: "meat or cheese filled", qty: 400, unit: "g", kcal4: 1100 },
+        { name: "Chicken stock", note: "good quality", qty: 1600, unit: "ml", kcal4: 200 },
+        { name: "Parmigiano Reggiano", note: "grated", qty: 50, unit: "g", kcal4: 200 },
+        { name: "Flat-leaf parsley", note: "chopped", qty: 10, unit: "g", kcal4: 4 },
+        { name: "Black pepper", qty: 1, unit: "tsp", kcal4: 6 },
+        { name: "Salt", qty: 1, unit: "tsp", kcal4: 0 }
+      ],
+      steps: [
+        ["Heat the broth", "Bring the stock to a gentle simmer in a wide pot. Taste and add salt if needed."],
+        ["Cook the tortelloni", "Lower the tortelloni into the broth and cook at a gentle simmer for 3 to 5 minutes, or as the packet says, until they float and the pasta is tender. Keep the heat low so they do not split."],
+        ["Season", "Add black pepper and check the seasoning."],
+        ["Serve", "Ladle the tortelloni and broth into warm bowls. Top with grated Parmigiano Reggiano and chopped parsley."]
+      ]
+    },
+    {
+      id: "tiramisu", name: "Tiramisu", course: "Dolce",
+      image: "img/tiramisu.webp", imageAlt: "A slice of tiramisu dusted with cocoa, with a fork and coffee beans",
+      ingredients: [
+        { name: "Mascarpone", qty: 500, unit: "g", kcal4: 2150 },
+        { name: "Caster sugar", qty: 100, unit: "g", kcal4: 400 },
+        { name: "Espresso", note: "strong, cooled", qty: 300, unit: "ml", kcal4: 6 },
+        { name: "Marsala", note: "or dark rum", qty: 2, unit: "tbsp", kcal4: 60 },
+        { name: "Cocoa powder", note: "unsweetened, to dust", qty: 2, unit: "tbsp", kcal4: 24 },
+        { name: "Eggs", note: "very fresh, separated", qty: 4, whole: true, kcalEach: 72 },
+        { name: "Savoiardi biscuits", note: "ladyfingers", qty: 24, whole: true, kcalEach: 40 }
+      ],
+      steps: [
+        ["Separate the eggs", "Separate the eggs into two large bowls. Use very fresh eggs, as the yolks are not cooked."],
+        ["Whisk the yolks", "Whisk the yolks with the sugar for 3 to 4 minutes, until pale and thick. Add the mascarpone and whisk until smooth."],
+        ["Whip the whites", "Whisk the egg whites to stiff peaks, then fold them gently into the mascarpone mixture in two batches."],
+        ["Soak the biscuits", "Mix the cooled espresso with the Marsala in a shallow dish. Dip each savoiardi for 1 to 2 seconds, so it is damp but not soggy."],
+        ["Layer", "Arrange half the biscuits in a dish, spread over half the cream, then repeat with a second layer of each."],
+        ["Chill", "Cover and refrigerate for at least 6 hours, ideally overnight."],
+        ["Dust and serve", "Dust generously with cocoa powder just before serving."]
+      ]
+    },
+    {
+      id: "pollo", name: "Pollo ai Funghi e Panna", course: "Secondo",
+      image: "img/pollo.webp", imageAlt: "Creamy chicken with mushrooms and parsley in a cast-iron pan",
+      ingredients: [
+        { name: "Chicken breasts", note: "skinless", qty: 4, whole: true, kcalEach: 220 },
+        { name: "Chestnut mushrooms", note: "sliced", qty: 400, unit: "g", kcal4: 88 },
+        { name: "Double cream", qty: 200, unit: "ml", kcal4: 690 },
+        { name: "Butter", qty: 30, unit: "g", kcal4: 215 },
+        { name: "Olive oil", qty: 1, unit: "tbsp", kcal4: 120 },
+        { name: "Plain flour", note: "for dusting", qty: 2, unit: "tbsp", kcal4: 58 },
+        { name: "White wine", qty: 100, unit: "ml", kcal4: 82 },
+        { name: "Chicken stock", qty: 150, unit: "ml", kcal4: 10 },
+        { name: "Flat-leaf parsley", note: "chopped", qty: 10, unit: "g", kcal4: 4 },
+        { name: "Salt", qty: 1, unit: "tsp", kcal4: 0 },
+        { name: "Shallots", qty: 2, whole: true, kcalEach: 20 },
+        { name: "Garlic cloves", qty: 2, whole: true, kcalEach: 4 }
+      ],
+      steps: [
+        ["Prepare the chicken", "Slice each breast in half horizontally to make thinner cutlets. Season with salt and dust lightly with flour."],
+        ["Sear", "Heat the olive oil and half the butter in a wide pan over medium-high heat. Cook the chicken 3 to 4 minutes per side until golden, then set aside on a plate."],
+        ["Cook the mushrooms", "Add the remaining butter and the mushrooms. Cook for 6 to 8 minutes, until the liquid has evaporated and they are browned."],
+        ["Soften the aromatics", "Add the shallots and garlic and cook for 2 minutes, until soft and fragrant."],
+        ["Deglaze", "Pour in the white wine and let it reduce by half, scraping up the browned bits from the pan."],
+        ["Add cream and stock", "Stir in the stock and cream and simmer gently for 4 to 5 minutes, until the sauce coats the back of a spoon."],
+        ["Finish", "Return the chicken and its juices to the pan and simmer for 5 minutes, until cooked through. Scatter with parsley and serve."]
+      ]
+    }
+  ];
+
+  // ---------- Translations (Singapore's four official languages) ----------
+  var LANGS = [
+    { code: "en", label: "English", html: "en" },
+    { code: "zh", label: "中文", html: "zh-Hans" },
+    { code: "ms", label: "Bahasa Melayu", html: "ms" },
+    { code: "ta", label: "தமிழ்", html: "ta" }
+  ];
+
+  var UI = {
+    en: { recipe: "Recipe", language: "Language", servings: "Servings", written: "Recipe is written for {n}", whole: "Whole recipe", per: "Per serving", kcal: "kcal", ingredients: "Ingredients", item: "Item", amount: "Amount", method: "Method", fewer: "Fewer servings", more: "More servings",
+      note: "Whole items such as onions and garlic cloves round to the nearest whole number, with a minimum of 1. Calories follow the amount shown.",
+      courses: { Primo: "Primo", Secondo: "Secondo", Dolce: "Dolce" }, units: { g: "g", ml: "ml", kg: "kg", L: "L", tbsp: "tbsp", tsp: "tsp" } },
+    zh: { recipe: "菜谱", language: "语言", servings: "份数", written: "本食谱按 {n} 人份编写", whole: "整份食谱", per: "每份", kcal: "千卡", ingredients: "食材", item: "项目", amount: "用量", method: "做法", fewer: "减少份数", more: "增加份数",
+      note: "洋葱、蒜瓣等整件食材会四舍五入为整数，最少为 1。热量按所显示的数量计算。",
+      courses: { Primo: "第一道菜", Secondo: "主菜", Dolce: "甜点" }, units: { g: "克", ml: "毫升", kg: "千克", L: "升", tbsp: "汤匙", tsp: "茶匙" } },
+    ms: { recipe: "Resipi", language: "Bahasa", servings: "Hidangan", written: "Resipi ini ditulis untuk {n} hidangan", whole: "Keseluruhan resipi", per: "Setiap hidangan", kcal: "kkal", ingredients: "Bahan-bahan", item: "Bahan", amount: "Kuantiti", method: "Kaedah", fewer: "Kurangkan hidangan", more: "Tambah hidangan",
+      note: "Bahan yang tidak boleh dibahagi seperti bawang dan ulas bawang putih dibundarkan kepada nombor bulat terdekat, minimum 1. Kalori mengikut kuantiti yang dipaparkan.",
+      courses: { Primo: "Hidangan pertama", Secondo: "Hidangan utama", Dolce: "Pencuci mulut" }, units: { g: "g", ml: "ml", kg: "kg", L: "L", tbsp: "sudu besar", tsp: "sudu teh" } },
+    ta: { recipe: "சமையல் குறிப்பு", language: "மொழி", servings: "பரிமாறல்கள்", written: "இந்தக் குறிப்பு {n} பேருக்கானது", whole: "முழு உணவு", per: "ஒரு பரிமாறலுக்கு", kcal: "கி.கலோரி", ingredients: "பொருட்கள்", item: "பொருள்", amount: "அளவு", method: "செய்முறை", fewer: "பரிமாறல்களைக் குறை", more: "பரிமாறல்களைக் கூட்டு",
+      note: "வெங்காயம், பூண்டு பல் போன்ற முழுமையாக எண்ண வேண்டிய பொருட்கள் அருகிலுள்ள முழு எண்ணாக்கப்படும்; குறைந்தபட்சம் 1. கலோரிகள் காட்டப்படும் அளவை அடிப்படையாகக் கொண்டவை.",
+      courses: { Primo: "முதல் உணவு", Secondo: "முதன்மை உணவு", Dolce: "இனிப்பு" }, units: { g: "கி", ml: "மி.லி", kg: "கி.கி", L: "லி", tbsp: "மேசைக்கரண்டி", tsp: "தேக்கரண்டி" } }
+  };
+
+  // Per language, per recipe: n = name, i = [name, note] aligned with ingredients, s = [title, text] aligned with steps.
+  var TR = {
+    zh: {
+      ragu: { n: "意式肉酱宽面",
+        i: [["干制宽面",""],["牛肉末",""],["意式培根（Pancetta）","切成细丁"],["番茄泥",""],["红酒",""],["全脂牛奶",""],["橄榄油",""],["帕玛森奶酪","磨碎，上桌时撒"],["盐",""],["洋葱","中等大小"],["胡萝卜","中等大小"],["西芹",""]],
+        s: [["制作香味底料（soffritto）","将洋葱、胡萝卜和西芹切成细末。厚底锅中小火偏中火加热橄榄油，下蔬菜煸炒 10 分钟，至非常软。"],["煎香肉末","加入意式培根，煎至出油。转大火，下牛肉末并打散，炒至上色且水分收干。"],["加入红酒","倒入红酒，煮至几乎完全收干。"],["慢火炖煮","加入番茄泥和少许盐。半盖锅盖，用最小火炖 2 小时，不时搅拌。若太干可加少许水。分量较大时可能需要更久。"],["加入牛奶收尾","最后 15 分钟加入牛奶，煮至肉酱浓稠有光泽。"],["煮意面","将宽面放入加了足量盐的沸水中煮至弹牙（al dente）。留出一杯煮面水，然后沥干。"],["拌匀装盘","将意面与肉酱拌匀，必要时用煮面水调稀。撒上磨碎的帕玛森奶酪即可享用。"]] },
+      tortelloni: { n: "高汤意式饺子",
+        i: [["新鲜意式饺子（Tortelloni）","肉馅或奶酪馅"],["鸡高汤","优质"],["帕玛森奶酪","磨碎"],["平叶欧芹","切碎"],["黑胡椒",""],["盐",""]],
+        s: [["加热高汤","将高汤倒入宽口锅，小火煮至微沸。尝味，必要时加盐。"],["煮饺子","将饺子放入高汤，保持微沸煮 3 至 5 分钟（或按包装说明），煮至浮起且面皮软嫩。火不要太大，以免饺子破裂。"],["调味","加入黑胡椒并确认咸淡。"],["装盘","将饺子和高汤盛入预热的碗中，撒上磨碎的帕玛森奶酪和切碎的欧芹。"]] },
+      tiramisu: { n: "提拉米苏",
+        i: [["马斯卡彭奶酪",""],["细砂糖",""],["浓缩咖啡","浓，放凉"],["马沙拉酒","或深色朗姆酒"],["可可粉","无糖，用于筛撒"],["鸡蛋","非常新鲜，蛋黄蛋白分开"],["手指饼干（Savoiardi）","意式手指饼"]],
+        s: [["分离蛋黄蛋白","将鸡蛋的蛋黄和蛋白分别放入两个大碗。请使用非常新鲜的鸡蛋，因为蛋黄不经加热。"],["打发蛋黄","将蛋黄和糖打发 3 至 4 分钟，至颜色变浅、质地浓稠。加入马斯卡彭奶酪，搅打至顺滑。"],["打发蛋白","将蛋白打至硬性发泡，分两次轻轻拌入马斯卡彭奶酪糊。"],["浸泡饼干","将放凉的浓缩咖啡与马沙拉酒在浅盘中混合。每片手指饼干浸 1 至 2 秒，使其湿润但不软烂。"],["分层铺放","在容器中铺一半饼干，抹上一半奶酪糊，再重复铺一层饼干和奶酪糊。"],["冷藏","盖好冷藏至少 6 小时，最好过夜。"],["撒粉上桌","上桌前在表面均匀撒上大量可可粉。"]] },
+      pollo: { n: "奶油蘑菇鸡",
+        i: [["鸡胸肉","去皮"],["栗色蘑菇","切片"],["高脂鲜奶油",""],["黄油",""],["橄榄油",""],["普通面粉","用于拍粉"],["白葡萄酒",""],["鸡高汤",""],["平叶欧芹","切碎"],["盐",""],["红葱头",""],["大蒜",""]],
+        s: [["处理鸡胸肉","将每块鸡胸肉横向片成两片，做成较薄的肉排。用盐调味，并薄薄地拍上一层面粉。"],["煎封","宽口锅中大火偏中，加热橄榄油和一半黄油。每面煎 3 至 4 分钟至金黄，盛出放在盘中备用。"],["炒蘑菇","加入剩余的黄油和蘑菇，炒 6 至 8 分钟，至水分蒸发并上色。"],["炒香配料","加入红葱头和大蒜，炒 2 分钟至变软出香。"],["加酒溶解锅底","倒入白葡萄酒，煮至减半，同时刮起锅底的焦香精华。"],["加入奶油和高汤","倒入高汤和奶油，小火煮 4 至 5 分钟，至酱汁能挂在勺背上。"],["收尾","将鸡肉连同汁水放回锅中，煮 5 分钟至熟透。撒上欧芹即可上桌。"]] }
+    },
+    ms: {
+      ragu: { n: "Tagliatelle al Ragù",
+        i: [["Tagliatelle kering",""],["Daging lembu cincang",""],["Pancetta","dipotong dadu halus"],["Passata tomato",""],["Wain merah",""],["Susu penuh krim",""],["Minyak zaitun",""],["Parmigiano Reggiano","diparut, untuk dihidang"],["Garam",""],["Bawang besar","saiz sederhana"],["Lobak merah","saiz sederhana"],["Batang saderi",""]],
+        s: [["Sediakan soffritto","Cincang halus bawang besar, lobak merah dan saderi. Panaskan minyak zaitun dalam periuk berdasar tebal dengan api sederhana rendah, kemudian masak sayur selama 10 minit sehingga sangat lembut."],["Perangkan daging","Masukkan pancetta dan masak sehingga lemaknya cair. Besarkan api, masukkan daging lembu dan pecahkan ketulannya, masak sehingga perang dan tiada cecair yang tinggal."],["Tambah wain","Tuangkan wain merah dan biarkan menggelegak sehingga hampir kering sepenuhnya."],["Reneh perlahan","Kacau dalam passata dan sedikit garam. Tutup separuh periuk dan masak dengan api paling kecil selama 2 jam, kacau sekali-sekala. Tambah sedikit air jika kering. Kuantiti yang lebih banyak mungkin memerlukan masa lebih lama."],["Siapkan dengan susu","Kacau dalam susu pada 15 minit terakhir dan masak sehingga ragù pekat dan berkilat."],["Masak pasta","Rebus tagliatelle dalam air yang dibubuh garam secukupnya sehingga al dente. Simpan secawan air rebusan, kemudian toskan."],["Gaul dan hidang","Gaulkan pasta dengan ragù, cairkan dengan air rebusan jika perlu. Hidangkan bersama Parmigiano Reggiano parut."]] },
+      tortelloni: { n: "Tortelloni dalam Sup Bening",
+        i: [["Tortelloni segar","berintikan daging atau keju"],["Stok ayam","bermutu tinggi"],["Parmigiano Reggiano","diparut"],["Pasli daun rata","dicincang"],["Lada hitam",""],["Garam",""]],
+        s: [["Panaskan sup","Didihkan stok perlahan-lahan dalam periuk lebar. Rasa dan tambah garam jika perlu."],["Masak tortelloni","Masukkan tortelloni ke dalam sup dan masak dengan didih perlahan selama 3 hingga 5 minit, atau mengikut arahan pada bungkusan, sehingga timbul dan pasta lembut. Kekalkan api kecil supaya tidak pecah."],["Perasakan","Tambah lada hitam dan semak rasa."],["Hidang","Senduk tortelloni dan sup ke dalam mangkuk yang suam. Taburkan Parmigiano Reggiano parut dan pasli cincang."]] },
+      tiramisu: { n: "Tiramisu",
+        i: [["Mascarpone",""],["Gula kastor",""],["Espresso","pekat, disejukkan"],["Marsala","atau rum gelap"],["Serbuk koko","tanpa gula, untuk ditaburkan"],["Telur","sangat segar, diasingkan"],["Biskut Savoiardi","biskut jari wanita"]],
+        s: [["Asingkan telur","Asingkan kuning dan putih telur ke dalam dua mangkuk besar. Gunakan telur yang sangat segar kerana kuning telur tidak dimasak."],["Pukul kuning telur","Pukul kuning telur bersama gula selama 3 hingga 4 minit sehingga pucat dan pekat. Masukkan mascarpone dan pukul sehingga licin."],["Pukul putih telur","Pukul putih telur sehingga puncak keras, kemudian lipat perlahan-lahan ke dalam adunan mascarpone dalam dua kumpulan."],["Rendam biskut","Campurkan espresso yang telah sejuk dengan Marsala dalam pinggan cetek. Celup setiap biskut savoiardi selama 1 hingga 2 saat, supaya lembap tetapi tidak lembik."],["Susun berlapis","Susun separuh biskut dalam bekas, sapukan separuh krim, kemudian ulang dengan satu lagi lapisan biskut dan krim."],["Sejukkan","Tutup dan simpan dalam peti sejuk sekurang-kurangnya 6 jam, lebih baik semalaman."],["Tabur dan hidang","Taburkan serbuk koko dengan banyak sebelum dihidang."]] },
+      pollo: { n: "Ayam Cendawan Krim",
+        i: [["Dada ayam","tanpa kulit"],["Cendawan chestnut","dihiris"],["Krim pekat",""],["Mentega",""],["Minyak zaitun",""],["Tepung gandum","untuk ditabur"],["Wain putih",""],["Stok ayam",""],["Pasli daun rata","dicincang"],["Garam",""],["Bawang merah",""],["Ulas bawang putih",""]],
+        s: [["Sediakan ayam","Potong setiap dada ayam kepada dua secara melintang untuk mendapatkan kepingan yang lebih nipis. Perasakan dengan garam dan taburkan sedikit tepung."],["Perangkan ayam","Panaskan minyak zaitun dan separuh mentega dalam kuali lebar dengan api sederhana tinggi. Masak ayam 3 hingga 4 minit setiap sebelah sehingga keemasan, kemudian ketepikan di atas pinggan."],["Masak cendawan","Masukkan baki mentega dan cendawan. Masak 6 hingga 8 minit sehingga cecair kering dan cendawan keperangan."],["Layukan bahan beraroma","Masukkan bawang merah dan bawang putih, masak 2 minit sehingga lembut dan harum."],["Larutkan sisa di kuali","Tuangkan wain putih dan biarkan mengurang separuh sambil mengikis sisa keperangan di dasar kuali."],["Tambah krim dan stok","Kacau dalam stok dan krim, reneh perlahan 4 hingga 5 minit sehingga sos melapisi belakang sudu."],["Siapkan","Kembalikan ayam dan jusnya ke dalam kuali, reneh 5 minit sehingga masak sepenuhnya. Taburkan pasli dan hidang."]] }
+    },
+    ta: {
+      ragu: { n: "டாக்லியாடெல்லே அல் ராகு",
+        i: [["உலர் டாக்லியாடெல்லே",""],["மாட்டிறைச்சி கீமா",""],["பான்செட்டா","பொடியாக நறுக்கியது"],["தக்காளி பாசாட்டா",""],["சிவப்பு ஒயின்",""],["முழு கொழுப்பு பால்",""],["ஆலிவ் எண்ணெய்",""],["பார்மிஜியானோ ரெஜ்ஜியானோ","துருவியது, பரிமாறுவதற்கு"],["உப்பு",""],["வெங்காயம்","நடுத்தர அளவு"],["கேரட்","நடுத்தர அளவு"],["செலரி தண்டுகள்",""]],
+        s: [["சோஃப்ரிட்டோ தயாரிக்கவும்","வெங்காயம், கேரட், செலரியை பொடியாக நறுக்கவும். கனமான பாத்திரத்தில் ஆலிவ் எண்ணெயை மிதமான குறைந்த தீயில் சூடாக்கி, காய்கறிகளை 10 நிமிடங்கள் நன்கு மென்மையாகும் வரை வதக்கவும்."],["இறைச்சியை பொன்னிறமாக்கவும்","பான்செட்டாவைச் சேர்த்து கொழுப்பு உருகும் வரை வதக்கவும். தீயை அதிகரித்து, மாட்டிறைச்சி கீமாவைச் சேர்த்து உதிர்த்து, பொன்னிறமாகி நீர் வற்றும் வரை வதக்கவும்."],["ஒயின் சேர்க்கவும்","சிவப்பு ஒயினை ஊற்றி, கிட்டத்தட்ட முழுவதும் வற்றும் வரை கொதிக்க விடவும்."],["மெதுவாக கொதிக்க விடவும்","பாசாட்டாவையும் சிறிது உப்பையும் சேர்த்துக் கிளறவும். பாதி மூடி, மிகக் குறைந்த தீயில் 2 மணி நேரம் அவ்வப்போது கிளறியபடி சமைக்கவும். காய்ந்துவிட்டால் சிறிது தண்ணீர் சேர்க்கவும். அதிக அளவு எனில் இன்னும் நேரம் ஆகலாம்."],["பால் சேர்த்து முடிக்கவும்","கடைசி 15 நிமிடங்களில் பாலைச் சேர்த்து, ராகு கெட்டியாகவும் பளபளப்பாகவும் ஆகும் வரை சமைக்கவும்."],["பாஸ்தாவை சமைக்கவும்","டாக்லியாடெல்லேவை போதுமான உப்பிட்ட தண்ணீரில் அல் டென்ட்டே பதத்திற்கு வேகவைக்கவும். ஒரு கப் வடிநீரை எடுத்து வைத்து, பின் வடிகட்டவும்."],["கலந்து பரிமாறவும்","பாஸ்தாவை ராகுவுடன் கலக்கவும்; தேவைப்பட்டால் வடிநீரால் தளர்த்தவும். துருவிய பார்மிஜியானோ ரெஜ்ஜியானோவுடன் பரிமாறவும்."]] },
+      tortelloni: { n: "குழம்பில் டோர்டெல்லோனி",
+        i: [["புதிய டோர்டெல்லோனி","இறைச்சி அல்லது சீஸ் நிரப்பியது"],["கோழி ஸ்டாக்","தரமானது"],["பார்மிஜியானோ ரெஜ்ஜியானோ","துருவியது"],["பிளாட்-லீஃப் பார்ஸ்லி","நறுக்கியது"],["கருமிளகு",""],["உப்பு",""]],
+        s: [["குழம்பை சூடாக்கவும்","அகலமான பாத்திரத்தில் ஸ்டாக்கை மெதுவாக கொதிக்க விடவும். சுவைத்துப் பார்த்து தேவைப்பட்டால் உப்பு சேர்க்கவும்."],["டோர்டெல்லோனியை வேகவைக்கவும்","டோர்டெல்லோனியை குழம்பில் இட்டு, மெதுவாக கொதிக்கும் நிலையில் 3 முதல் 5 நிமிடங்கள் அல்லது பாக்கெட்டில் உள்ளபடி, அவை மேலே மிதந்து பாஸ்தா மென்மையாகும் வரை சமைக்கவும். உடையாமல் இருக்க தீயைக் குறைவாக வைக்கவும்."],["சுவையூட்டவும்","கருமிளகு சேர்த்து சுவையைச் சரிபார்க்கவும்."],["பரிமாறவும்","டோர்டெல்லோனியையும் குழம்பையும் சூடான கிண்ணங்களில் ஊற்றவும். துருவிய பார்மிஜியானோ ரெஜ்ஜியானோவையும் நறுக்கிய பார்ஸ்லியையும் மேலே தூவவும்."]] },
+      tiramisu: { n: "டிராமிசு",
+        i: [["மஸ்கார்போன்",""],["நுண்ணிய சீனி",""],["எஸ்பிரெசோ காபி","கடுமையானது, ஆறியது"],["மார்சாலா","அல்லது கருப்பு ரம்"],["கொக்கோ தூள்","இனிப்பில்லாதது, தூவுவதற்கு"],["முட்டை","மிகவும் புதியது, பிரித்தது"],["சவோயார்டி பிஸ்கட்","லேடிஃபிங்கர்ஸ்"]],
+        s: [["முட்டைகளைப் பிரிக்கவும்","முட்டைகளை மஞ்சள் கருவும் வெள்ளைக் கருவுமாக இரண்டு பெரிய கிண்ணங்களில் பிரிக்கவும். மஞ்சள் கரு சமைக்கப்படாததால் மிகவும் புதிய முட்டைகளைப் பயன்படுத்தவும்."],["மஞ்சள் கருவை அடிக்கவும்","மஞ்சள் கருவையும் சீனியையும் 3 முதல் 4 நிமிடங்கள் வெளிர் நிறமாகி கெட்டியாகும் வரை அடிக்கவும். மஸ்கார்போனைச் சேர்த்து மென்மையாகும் வரை அடிக்கவும்."],["வெள்ளைக் கருவை அடிக்கவும்","வெள்ளைக் கருவை கெட்டியான முனைகள் உருவாகும் வரை அடித்து, மஸ்கார்போன் கலவையில் இரண்டு தடவையாக மெதுவாகக் கலக்கவும்."],["பிஸ்கட்டுகளை நனைக்கவும்","ஆறிய எஸ்பிரெசோவையும் மார்சாலாவையும் ஆழமற்ற தட்டில் கலக்கவும். ஒவ்வொரு சவோயார்டி பிஸ்கட்டையும் 1 முதல் 2 வினாடிகள் தோய்க்கவும்; ஈரமாக இருக்க வேண்டும், ஆனால் குழைந்துவிடக் கூடாது."],["அடுக்குகளாக வைக்கவும்","பாதி பிஸ்கட்டுகளை பாத்திரத்தில் அடுக்கி, பாதி கிரீமைப் பரப்பவும். பின்னர் இரண்டாவது அடுக்காக மீண்டும் செய்யவும்."],["குளிரூட்டவும்","மூடி குறைந்தது 6 மணி நேரம், முடிந்தால் ஒரே இரவு குளிர்சாதனப் பெட்டியில் வைக்கவும்."],["தூவி பரிமாறவும்","பரிமாறும் முன் கொக்கோ தூளை தாராளமாகத் தூவவும்."]] },
+      pollo: { n: "காளான் கிரீம் கோழி",
+        i: [["கோழி மார்பு","தோல் நீக்கியது"],["பழுப்பு காளான்","துண்டாக்கியது"],["அடர் கிரீம்",""],["வெண்ணெய்",""],["ஆலிவ் எண்ணெய்",""],["மைதா மாவு","தூவுவதற்கு"],["வெள்ளை ஒயின்",""],["கோழி ஸ்டாக்",""],["பிளாட்-லீஃப் பார்ஸ்லி","நறுக்கியது"],["உப்பு",""],["சின்ன வெங்காயம்",""],["பூண்டு பற்கள்",""]],
+        s: [["கோழியை தயார் செய்யவும்","ஒவ்வொரு கோழி மார்புத் துண்டையும் குறுக்காக இரண்டாக வெட்டி மெல்லிய துண்டுகளாக்கவும். உப்பு சேர்த்து, சிறிது மாவைத் தூவவும்."],["பொன்னிறமாக வறுக்கவும்","அகன்ற வாணலியில் ஆலிவ் எண்ணெயையும் பாதி வெண்ணெயையும் மிதமான அதிக தீயில் சூடாக்கவும். கோழியை ஒவ்வொரு பக்கமும் 3 முதல் 4 நிமிடங்கள் பொன்னிறமாகும் வரை வறுத்து, தட்டில் எடுத்து வைக்கவும்."],["காளானை வதக்கவும்","மீதமுள்ள வெண்ணெயையும் காளானையும் சேர்க்கவும். 6 முதல் 8 நிமிடங்கள் நீர் வற்றி பழுப்பு நிறமாகும் வரை வதக்கவும்."],["நறுமணப் பொருட்களை வதக்கவும்","சின்ன வெங்காயத்தையும் பூண்டையும் சேர்த்து, 2 நிமிடங்கள் மென்மையாகி மணம் வரும் வரை வதக்கவும்."],["வாணலியின் அடிப்பகுதியைக் கரைக்கவும்","வெள்ளை ஒயினை ஊற்றி, பாதியாக வற்றும் வரை கொதிக்க விடவும்; அடியில் ஒட்டியிருக்கும் பழுப்புத் துகள்களை சுரண்டிக் கலக்கவும்."],["கிரீம் மற்றும் ஸ்டாக் சேர்க்கவும்","ஸ்டாக்கையும் கிரீமையும் சேர்த்துக் கிளறி, 4 முதல் 5 நிமிடங்கள் கரண்டியின் பின்புறம் ஒட்டும் பதம் வரை மெதுவாக கொதிக்க விடவும்."],["முடிக்கவும்","கோழியையும் அதன் சாறையும் வாணலிக்குள் திருப்பி வைத்து, முழுமையாக வேகும் வரை 5 நிமிடங்கள் கொதிக்க விடவும். பார்ஸ்லி தூவி பரிமாறவும்."]] }
+    }
+  };
+
+  var lang = "en";
+  var current = RECIPES[0];
+  var servings = BASE;
+  var el = {
+    count: document.getElementById("count"),
+    minus: document.getElementById("minus"),
+    plus: document.getElementById("plus"),
+    total: document.getElementById("total"),
+    per: document.getElementById("per"),
+    list: document.getElementById("list"),
+    steps: document.getElementById("steps"),
+    select: document.getElementById("recipe"),
+    title: document.getElementById("title"),
+    course: document.getElementById("course"),
+    photo: document.getElementById("photo"),
+    photoImg: document.getElementById("photo-img"),
+    lang: document.getElementById("lang")
+  };
+
+  var FRACTIONS = { 0: "", 0.25: "¼", 0.5: "½", 0.75: "¾" };
+
+  function fmtSpoon(v) {
+    var q = Math.max(0.25, Math.round(v * 4) / 4);
+    var whole = Math.floor(q), frac = q - whole;
+    return (whole ? whole : "") + (FRACTIONS[frac] || "");
+  }
+
+  function trim(n) { return String(Math.round(n * 10) / 10); }
+
+  function fmtMetric(v, unit) {
+    if (unit === "g" && v >= 1000) return { text: trim(v / 1000), unit: "kg" };
+    if (unit === "ml" && v >= 1000) return { text: trim(v / 1000), unit: "L" };
+    return { text: String(Math.max(1, Math.round(v))), unit: unit };
+  }
+
+  function compute(item, s) {
+    var factor = s / BASE;
+    if (item.whole) {
+      var n = Math.max(1, Math.round(item.qty * factor));
+      return { text: String(n), unit: "", kcal: Math.round(n * item.kcalEach) };
+    }
+    var raw = item.qty * factor;
+    var kcal = Math.round(item.kcal4 * factor);
+    if (item.unit === "tbsp" || item.unit === "tsp") {
+      return { text: fmtSpoon(raw), unit: item.unit, kcal: kcal };
+    }
+    var m = fmtMetric(raw, item.unit);
+    return { text: m.text, unit: m.unit, kcal: kcal };
+  }
+
+  function fmt(n) { return n.toLocaleString("en-US"); }
+
+  function t(key) { return UI[lang][key]; }
+  function rt() { return lang === "en" ? null : TR[lang][current.id]; }
+  function unitLabel(u) { return UI[lang].units[u] || u; }
+  function recipeName(r) { return lang === "en" ? r.name : TR[lang][r.id].n; }
+
+  function renderRecipe() {
+    var tr = rt();
+    el.title.textContent = recipeName(current);
+    el.course.textContent = UI[lang].courses[current.course];
+    if (current.image) {
+      el.photoImg.src = current.image; el.photoImg.alt = current.imageAlt || current.name;
+      el.photo.hidden = false;
+    } else {
+      el.photo.hidden = true; el.photoImg.removeAttribute("src");
+    }
+    var html = "";
+    current.steps.forEach(function (st, i) {
+      var x = tr ? tr.s[i] : st;
+      html += '<li><span class="step-n">' + (i + 1) + '</span><div><strong>' + x[0] + '</strong><p>' + x[1] + '</p></div></li>';
+    });
+    el.steps.innerHTML = html;
+  }
+
+  function render() {
+    var total = 0, html = "";
+    var tr = rt();
+    current.ingredients.forEach(function (item, idx) {
+      var r = compute(item, servings);
+      total += r.kcal;
+      var nm = tr ? tr.i[idx][0] : item.name;
+      var nt = tr ? tr.i[idx][1] : item.note;
+      html += '<li class="row"><span class="name">' + nm +
+        (nt ? '<small>' + nt + '</small>' : '') + '</span>' +
+        '<span class="num qty">' + r.text + (r.unit ? '<span class="unit">' + unitLabel(r.unit) + '</span>' : '') + '</span>' +
+        '<span class="num kcal">' + fmt(r.kcal) + '</span></li>';
+    });
+    el.list.innerHTML = html;
+    el.count.textContent = servings;
+    el.total.textContent = fmt(total);
+    el.per.textContent = fmt(Math.round(total / servings));
+    el.minus.disabled = servings <= MIN;
+    el.plus.disabled = servings >= MAX;
+  }
+
+  function step(d) {
+    var next = Math.min(MAX, Math.max(MIN, servings + d));
+    if (next !== servings) { servings = next; render(); }
+  }
+
+  function fillRecipeOptions() {
+    var keep = current.id;
+    el.select.innerHTML = "";
+    RECIPES.forEach(function (r) {
+      var o = document.createElement("option");
+      o.value = r.id; o.textContent = recipeName(r);
+      el.select.appendChild(o);
+    });
+    el.select.value = keep;
+  }
+
+  function applyStatic() {
+    document.documentElement.lang = LANGS.filter(function (l) { return l.code === lang; })[0].html;
+    var nodes = document.querySelectorAll("[data-i18n]");
+    for (var i = 0; i < nodes.length; i++) nodes[i].textContent = t(nodes[i].getAttribute("data-i18n"));
+    document.getElementById("written").textContent = t("written").replace("{n}", BASE);
+    el.minus.setAttribute("aria-label", t("fewer"));
+    el.plus.setAttribute("aria-label", t("more"));
+  }
+
+  LANGS.forEach(function (l) {
+    var o = document.createElement("option");
+    o.value = l.code; o.textContent = l.label;
+    el.lang.appendChild(o);
+  });
+  el.lang.addEventListener("change", function () {
+    lang = el.lang.value;
+    applyStatic(); fillRecipeOptions(); renderRecipe(); render();
+  });
+  fillRecipeOptions();
+  el.select.addEventListener("change", function () {
+    current = RECIPES.filter(function (r) { return r.id === el.select.value; })[0];
+    renderRecipe(); render();
+  });
+
+  el.minus.addEventListener("click", function () { step(-1); });
+  el.plus.addEventListener("click", function () { step(1); });
+  document.addEventListener("keydown", function (e) {
+    if (e.target && e.target.tagName === "SELECT") return;
+    if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); step(1); }
+    if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
+  });
+
+  applyStatic();
+  renderRecipe();
+  render();
+</script>
+</body>
+</html>
